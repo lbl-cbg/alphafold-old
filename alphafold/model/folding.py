@@ -86,8 +86,8 @@ class InvariantPointAttention(hk.Module):
 
     Args:
       inputs_1d: (N, C) 1D input embedding that is the basis for the
-        scalar queries.
-      inputs_2d: (N, M, C') 2D input embedding, used for biases and values.
+        scalar queries.                                                         # AJTRITT: "Single Representation"
+      inputs_2d: (N, M, C') 2D input embedding, used for biases and values.     # AJTRITT: "Pair representation"
       mask: (N, 1) mask to indicate which elements of inputs_1d participate
         in the attention.
       affine: QuatAffine object describing the position and orientation of
@@ -302,7 +302,7 @@ class FoldIteration(hk.Module):
                is_training,
                initial_act,
                safe_key=None,
-               static_feat_2d=None,
+               static_feat_2d=None,   # AJTRITT: "Pair representation" from Figure 3c
                aatype=None):
     c = self.config
 
@@ -319,7 +319,7 @@ class FoldIteration(hk.Module):
 
     affine = quat_affine.QuatAffine.from_tensor(activations['affine'])
 
-    act = activations['act']
+    act = activations['act']  # AJTRITT: "Single representation" from Figure 3c
     attention_module = InvariantPointAttention(self.config, self.global_config)
     # Attention
     attn = attention_module(

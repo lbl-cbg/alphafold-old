@@ -240,6 +240,8 @@ class AlphaFoldIteration(hk.Module):
       if name in ('predicted_lddt', 'predicted_aligned_error'):
         continue
       else:
+        # AJTRITT: I think this is where the representations from the Evoformer will come out
+
         ret[name] = module(representations, batch, is_training)
         if 'representations' in ret[name]:
           # Extra representations from the head. Used by the structure module
