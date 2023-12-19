@@ -26,6 +26,9 @@ from Bio.PDB import PDBParser
 from Bio.PDB.mmcifio import MMCIFIO
 from Bio.PDB.Structure import Structure
 import numpy as np
+from string import ascii_uppercase,ascii_lowercase
+
+CHAIN_IDs = ascii_uppercase+ascii_lowercase
 
 FeatureDict = Mapping[str, np.ndarray]
 ModelOutput = Mapping[str, Any]  # Is a nested dict.
@@ -224,6 +227,7 @@ def _chain_end(atom_index, end_resname, chain_name, residue_index) -> str:
           f'{chain_name:>1}{residue_index:>4}')
 
 
+
 def to_pdb(prot: Protein) -> str:
   """Converts a `Protein` instance to a PDB string.
 
@@ -302,7 +306,6 @@ def to_pdb(prot: Protein) -> str:
   # Pad all lines to 80 characters.
   pdb_lines = [line.ljust(80) for line in pdb_lines]
   return '\n'.join(pdb_lines) + '\n'  # Add terminating newline.
-
 
 def ideal_atom_mask(prot: Protein) -> np.ndarray:
   """Computes an ideal atom mask.

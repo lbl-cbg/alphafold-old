@@ -63,9 +63,9 @@ def make_msa_features(msas: Sequence[parsers.Msa]) -> FeatureDict:
     if not msa:
       raise ValueError(f'MSA {msa_index} must contain at least one sequence.')
     for sequence_index, sequence in enumerate(msa.sequences):
-      if sequence in seen_sequences:
-        continue
-      seen_sequences.add(sequence)
+      #if sequence in seen_sequences:
+      #  continue
+      #seen_sequences.add(sequence)
       int_msa.append(
           [residue_constants.HHBLITS_AA_TO_ID[res] for res in sequence])
       deletion_matrix.append(msa.deletion_matrix[sequence_index])

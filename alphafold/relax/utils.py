@@ -52,10 +52,15 @@ def overwrite_b_factors(pdb_str: str, bfactors: np.ndarray) -> str:
     atom.bfactor = bfactors[idx, residue_constants.atom_order['CA']]
 
   new_pdb = io.StringIO()
+  # work around for BioPython 1.80 breaking PDBIO with StringIO
+  close_workaround = new_pdb.close
+  new_pdb.close = lambda: None
   pdb_io = PDB.PDBIO()
   pdb_io.set_structure(structure)
   pdb_io.save(new_pdb)
-  return new_pdb.getvalue()
+  res = new_pdb.getvalue()
+  close_workaround()
+  return res
 
 
 def assert_equal_nonterminal_atom_types(

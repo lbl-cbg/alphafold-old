@@ -530,24 +530,21 @@ def generate_monomer_rigids(representations: Mapping[str, jnp.ndarray],
       name='pair_layer_norm')(
           representations['pair'])
 
-  safe_keys = safe_key.split(c.num_layer)
   outputs = []
-  for key in safe_keys:
+  def fold_iter(act, key):
+      act, out = fold_iteration(
+          act,
+          initial_act=initial_act,
+          static_feat_2d=act_2d,
+          aatype=batch['aatype'],
+          safe_key=prng.SafeKey(key),
+          sequence_mask=sequence_mask,
+          update_rigid=True,
+          is_training=is_training)
+      return act, out
 
-    activations, output = fold_iteration(
-        activations,
-        initial_act=initial_act,
-        static_feat_2d=act_2d,
-        aatype=batch['aatype'],
-        safe_key=key,
-        sequence_mask=sequence_mask,
-        update_rigid=True,
-        is_training=is_training,
-        )
-    outputs.append(output)
-
-  output = jax.tree_map(lambda *x: jnp.stack(x), *outputs)
-  # Pass along for LDDT-Head.
+  keys = jax.random.split(safe_key.get(), c.num_layer)
+  activations, output = hk.scan(fold_iter, activations, keys)
   output['act'] = activations['act']
 
   return output

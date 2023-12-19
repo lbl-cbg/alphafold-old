@@ -18,17 +18,16 @@ from setuptools import find_packages
 from setuptools import setup
 
 setup(
-    name='alphafold',
-    version=version.__version__,
-    description=(
-        'An implementation of the inference pipeline of AlphaFold v2.0. This is'
-        ' a completely new model that was entered as AlphaFold2 in CASP14 and'
-        ' published in Nature.'
-    ),
+    name='alphafold-colabfold',
+    version='2.3.5',
+    long_description_content_type='text/markdown',
+    description='An implementation of the inference pipeline of AlphaFold v2.3.1. '
+    'This is a completely new model that was entered as AlphaFold2 in CASP14 '
+    'and published in Nature. This package contains patches for colabfold.',
     author='DeepMind',
     author_email='alphafold@deepmind.com',
     license='Apache License, Version 2.0',
-    url='https://github.com/deepmind/alphafold',
+    url='https://github.com/sokrypton/alphafold',
     packages=find_packages(),
     install_requires=[
         'absl-py',
@@ -61,4 +60,5 @@ setup(
         'Programming Language :: Python :: 3.10',
         'Topic :: Scientific/Engineering :: Artificial Intelligence',
     ],
+    include_package_data=True,
 )

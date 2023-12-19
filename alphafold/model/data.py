@@ -14,7 +14,6 @@
 
 """Convenience functions for reading data."""
 
-import io
 import os
 from alphafold.model import utils
 import haiku as hk
@@ -22,12 +21,9 @@ import numpy as np
 # Internal import (7716).
 
 
-def get_model_haiku_params(model_name: str, data_dir: str) -> hk.Params:
+def get_model_haiku_params(model_name: str,
+  data_dir: str, fuse: bool = True, to_jnp: bool = True) -> hk.Params:
   """Get the Haiku parameters from a model name."""
-
   path = os.path.join(data_dir, 'params', f'params_{model_name}.npz')
-
-  with open(path, 'rb') as f:
-    params = np.load(io.BytesIO(f.read()), allow_pickle=False)
-
-  return utils.flat_params_to_haiku(params)
+  params = np.load(path, allow_pickle=False)
+  return utils.flat_params_to_haiku(params, fuse=fuse, to_jnp=to_jnp)
