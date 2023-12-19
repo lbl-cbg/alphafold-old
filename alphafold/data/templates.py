@@ -216,17 +216,6 @@ def _assess_hhsearch_hit(
     raise DateError(f'Date ({release_dates[hit_pdb_code]}) > max template date '
                     f'({release_date_cutoff}).')
 
-  if align_ratio <= min_align_ratio:
-    raise AlignRatioError('Proportion of residues aligned to query too small. '
-                          f'Align ratio: {align_ratio}.')
-
-  if duplicate:
-    raise DuplicateError('Template is an exact subsequence of query with large '
-                         f'coverage. Length ratio: {length_ratio}.')
-
-  if len(template_sequence) < 10:
-    raise LengthError(f'Template too short. Length: {len(template_sequence)}.')
-
   return True
 
 
@@ -712,7 +701,8 @@ def _process_single_hit(
         hit_pdb_code=hit_pdb_code,
         query_sequence=query_sequence,
         release_dates=release_dates,
-        release_date_cutoff=max_template_date)
+        release_date_cutoff=max_template_date,
+        max_subsequence_ratio=1.0)
   except PrefilterError as e:
     msg = f'hit {hit_pdb_code}_{hit_chain_id} did not pass prefilter: {str(e)}'
     logging.info(msg)

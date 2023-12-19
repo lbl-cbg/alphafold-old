@@ -23,7 +23,7 @@ Lower-level modules up to EvoformerIteration are reused from modules.py.
 import functools
 from typing import Sequence
 
-from alphafold.common import residue_constants
+from alphafold.common import residue_constants, confidence
 from alphafold.model import all_atom_multimer
 from alphafold.model import common_modules
 from alphafold.model import folding_multimer
@@ -201,27 +201,20 @@ def nearest_neighbor_clusters(batch, gap_agreement_weight=0.):
 
   return cluster_profile, cluster_deletion_mean
 
-
 def create_msa_feat(batch):
   """Create and concatenate MSA features."""
   msa_1hot = jax.nn.one_hot(batch['msa'], 23)
   deletion_matrix = batch['deletion_matrix']
   has_deletion = jnp.clip(deletion_matrix, 0., 1.)[..., None]
-  deletion_value = (jnp.arctan(deletion_matrix / 3.) * (2. / jnp.pi))[..., None]
-
-  deletion_mean_value = (jnp.arctan(batch['cluster_deletion_mean'] / 3.) *
-                         (2. / jnp.pi))[..., None]
-
+  enc = lambda x: (jnp.arctan(x / 3.) * (2. / jnp.pi))[..., None]
   msa_feat = [
       msa_1hot,
       has_deletion,
-      deletion_value,
-      batch['cluster_profile'],
-      deletion_mean_value
+      enc(deletion_matrix),
+      batch.get('cluster_profile',msa_1hot),
+      enc(batch.get('cluster_deletion_mean',deletion_matrix))
   ]
-
   return jnp.concatenate(msa_feat, axis=-1)
-
 
 def create_extra_msa_feature(batch, num_extra_msa):
   """Expand extra_msa into 1hot and concat with other extra msa features.
@@ -437,8 +430,7 @@ class AlphaFold(hk.Module):
 
     def get_prev(ret):
       new_prev = {
-          'prev_pos':
-              ret['structure_module']['final_atom_positions'],
+          'prev_pos': ret['structure_module']['final_atom_positions'],
           'prev_msa_first_row': ret['representations']['msa_first_row'],
           'prev_pair': ret['representations']['pair'],
       }
@@ -450,78 +442,39 @@ class AlphaFold(hk.Module):
           batch=recycled_batch,
           is_training=is_training,
           safe_key=safe_key)
-
-    prev = {}
-    emb_config = self.config.embeddings_and_evoformer
-    if emb_config.recycle_pos:
-      prev['prev_pos'] = jnp.zeros(
-          [num_res, residue_constants.atom_type_num, 3])
-    if emb_config.recycle_features:
-      prev['prev_msa_first_row'] = jnp.zeros(
-          [num_res, emb_config.msa_channel])
-      prev['prev_pair'] = jnp.zeros(
-          [num_res, num_res, emb_config.pair_channel])
-
-    if self.config.num_recycle:
-      if 'num_iter_recycling' in batch:
-        # Training time: num_iter_recycling is in batch.
-        # Value for each ensemble batch is the same, so arbitrarily taking 0-th.
-        num_iter = batch['num_iter_recycling'][0]
-
-        # Add insurance that even when ensembling, we will not run more
-        # recyclings than the model is configured to run.
-        num_iter = jnp.minimum(num_iter, c.num_recycle)
-      else:
-        # Eval mode or tests: use the maximum number of iterations.
-        num_iter = c.num_recycle
-
-      def distances(points):
-        """Compute all pairwise distances for a set of points."""
-        return jnp.sqrt(jnp.sum((points[:, None] - points[None, :])**2,
-                                axis=-1))
-
-      def recycle_body(x):
-        i, _, prev, safe_key = x
-        safe_key1, safe_key2 = safe_key.split() if c.resample_msa_in_recycling else safe_key.duplicate()  # pylint: disable=line-too-long
-        ret = apply_network(prev=prev, safe_key=safe_key2)
-        return i+1, prev, get_prev(ret), safe_key1
-
-      def recycle_cond(x):
-        i, prev, next_in, _ = x
-        ca_idx = residue_constants.atom_order['CA']
-        sq_diff = jnp.square(distances(prev['prev_pos'][:, ca_idx, :]) -
-                             distances(next_in['prev_pos'][:, ca_idx, :]))
-        mask = batch['seq_mask'][:, None] * batch['seq_mask'][None, :]
-        sq_diff = utils.mask_mean(mask, sq_diff)
-        # Early stopping criteria based on criteria used in
-        # AF2Complex: https://www.nature.com/articles/s41467-022-29394-2
-        diff = jnp.sqrt(sq_diff + 1e-8)  # avoid bad numerics giving negatives
-        less_than_max_recycles = (i < num_iter)
-        has_exceeded_tolerance = (
-            (i == 0) | (diff > c.recycle_early_stop_tolerance))
-        return less_than_max_recycles & has_exceeded_tolerance
-
-      if hk.running_init():
-        num_recycles, _, prev, safe_key = recycle_body(
-            (0, prev, prev, safe_key))
-      else:
-        num_recycles, _, prev, safe_key = hk.while_loop(
-            recycle_cond,
-            recycle_body,
-            (0, prev, prev, safe_key))
+    
+    # initialize
+    prev = batch.pop("prev", None)    
+    if prev is None:
+      L = num_res
+      prev = {'prev_msa_first_row': jnp.zeros([L,256]),
+              'prev_pair':          jnp.zeros([L,L,128]),
+              'prev_pos':           jnp.zeros([L,37,3])}
     else:
-      # No recycling.
-      num_recycles = 0
+      for k,v in prev.items():
+        if v.dtype == jnp.float16:
+          prev[k] = v.astype(jnp.float32)
 
-    # Run extra iteration.
     ret = apply_network(prev=prev, safe_key=safe_key)
-
+    ret["prev"] = get_prev(ret)
+    
     if not return_representations:
       del ret['representations']
-    ret['num_recycles'] = num_recycles
+
+    # add confidence metrics
+    ret.update(confidence.get_confidence_metrics(
+      prediction_result=ret,
+      mask=batch["seq_mask"],
+      rank_by=self.config.rank_by,
+      use_jnp=True))
+
+    ret["tol"] = confidence.compute_tol(
+      prev["prev_pos"], 
+      ret["prev"]["prev_pos"],
+      batch["seq_mask"], 
+      use_jnp=True)
 
     return ret
-
 
 class EmbeddingsAndEvoformer(hk.Module):
   """Embeds the input data and runs Evoformer.
@@ -560,7 +513,7 @@ class EmbeddingsAndEvoformer(hk.Module):
     pos = batch['residue_index']
     asym_id = batch['asym_id']
     asym_id_same = jnp.equal(asym_id[:, None], asym_id[None, :])
-    offset = pos[:, None] - pos[None, :]
+    offset = batch.pop("offset", pos[:,None] - pos[None,:])
     dtype = jnp.bfloat16 if gc.bfloat16 else jnp.float32
 
     clipped_offset = jnp.clip(
@@ -633,8 +586,10 @@ class EmbeddingsAndEvoformer(hk.Module):
       batch = sample_msa(sample_key, batch, c.num_msa)
       batch = make_masked_msa(batch, mask_key, c.masked_msa)
 
-      (batch['cluster_profile'],
-       batch['cluster_deletion_mean']) = nearest_neighbor_clusters(batch)
+      if c.use_cluster_profile:
+        (batch['cluster_profile'],
+         batch['cluster_deletion_mean']) = nearest_neighbor_clusters(batch)
+
 
       msa_feat = create_msa_feat(batch).astype(dtype)
 
