@@ -29,6 +29,8 @@ import numpy as np
 import tensorflow.compat.v1 as tf
 import tree
 
+from alphafold.metfish.representation_manipulation import reinitialize_representations
+
 class RunModel:
   """Container for JAX model."""
 
@@ -195,7 +197,10 @@ class RunModel:
             single = single @ single_act["weights"] + single_act["bias"]
           result["representations"] = {"pair":   prev["prev_pair"],
                                        "single": single}
-                                       
+
+        # TODO - metfish representation manipulations
+        prev = reinitialize_representations(prev, aatype=aatype, multimer_mode=self.multimer_mode, )
+
         # callback
         if callback is not None: callback(result, r)
 
