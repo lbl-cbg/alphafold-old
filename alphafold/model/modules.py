@@ -31,6 +31,9 @@ import haiku as hk
 import jax
 import jax.numpy as jnp
 
+_SOFTMAX_MASK = -1e9
+
+
 def softmax_cross_entropy(logits, labels):
   """Computes softmax cross entropy given logits and one-hot class labels."""
   loss = -jnp.sum(labels * jax.nn.log_softmax(logits), axis=-1)
